@@ -1,5 +1,9 @@
 #!/bin/sh
+<% if @options[:instance] -%>
+PIDFILE="<%= node['graphite']['storage_dir'] %>/carbon-cache-<%= @options[:instance]%>.pid"
+<% else -%>
 PIDFILE="<%= node['graphite']['storage_dir'] %>/carbon-cache-a.pid"
+<% end -%>
 
 if [ -e $PIDFILE ]; then
     rm -v $PIDFILE

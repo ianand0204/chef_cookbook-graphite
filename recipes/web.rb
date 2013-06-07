@@ -38,8 +38,26 @@ dep_packages = case node['platform_family']
                  %w{ python-cairo-dev python-django python-django-tagging python-memcache python-rrdtool }
                when "rhel", "fedora"
                  %w{ bitmap bitmap-fonts Django django-tagging pycairo-devel python-devel python-memcached mod_wsgi python-sqlite2 python-zope-interface }
+               when "freebsd"
+                 %w{ py-cairo py-django py-django-tagging py-memcached py-sqlite3 mod_python3}
                end
-dep_packages.each do |pkg|
+if node['graphite']['database']['adapter'] == 'postgresql'
+  db_packages = case node['platform_family']
+                when "freebsd"
+                  %w{ py-psycopg2 }
+                else
+                  %w{ py-psycopg2 }
+                end
+end
+if node['graphite']['ldap']['enable'] == 'true'
+ldap_packages = case node['platform_family']
+              when "freebsd"
+                %w{ py-ldap2 }
+              else
+                %w{ py-ldap2 }
+              end
+end
+([dep_packages,db_packages,ldap_packages].flatten-[nil]).each do |pkg|
   package pkg do
     action :install
   end
@@ -81,6 +99,8 @@ template "#{docroot}/graphite/local_settings.py" do
   variables(:timezone => node['graphite']['timezone'],
             :base_dir => node['graphite']['base_dir'],
             :doc_root => node['graphite']['doc_root'],
+            :db_options => node['graphite']['database'],
+            :ldap => node['graphite']['ldap'],
             :storage_dir => node['graphite']['storage_dir'] )
 end
 

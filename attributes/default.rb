@@ -3,6 +3,8 @@
 # Attributes:: graphite
 #
 
+default['graphite']['debug'] = true
+
 default['graphite']['version'] = "0.9.10"
 default['graphite']['password'] = "change_me"
 default['graphite']['url'] = "graphite"
@@ -32,9 +34,28 @@ default['graphite']['carbon']['pickle_receiver_interface'] = "0.0.0.0"
 default['graphite']['carbon']['pickle_receiver_port'] = 2004
 default['graphite']['carbon']['cache_query_interface'] =     "0.0.0.0"
 default['graphite']['carbon']['cache_query_port'] = 7002
+default['graphite']['carbon']['cache_instances'] = 1
 default['graphite']['carbon']['max_cache_size'] = "inf"
 default['graphite']['carbon']['max_creates_per_second'] = "inf"
 default['graphite']['carbon']['max_updates_per_second'] = "1000"
+default['graphite']['carbon']['relay']['instances'] = 1
+default['graphite']['carbon']['relay']['line_receiver_interface'] = 1
+default['graphite']['carbon']['relay']['line_receiver_port'] = 2003
+default['graphite']['carbon']['relay']['pickle_receiver_interface'] = "0.0.0.0"
+default['graphite']['carbon']['relay']['pickle_receiver_port'] = 2004
+default['graphite']['carbon']['relay']['max_datapoints_per_message'] = "500"
+default['graphite']['carbon']['relay']['use_flow_control'] = true
+default['graphite']['carbon']['relay']['relay_method'] = "consistent-hashing"
+default['graphite']['carbon']['relay']['max_queue_size'] = "1000"
+
+default['graphite']['ha_relay']['enable'] = false
+default['graphite']['ha_relay']['instances'] = 1
+default['graphite']['ha_relay']['enable'] = false
+default['graphite']['ha_relay']['line_receiver_port'] = 2103
+default['graphite']['ha_relay']['pickle_receiver_port'] = 2104
+default['graphite']['ha_relay']['role_name'] = "graphite_cluster_node"
+default['graphite']['ha_relay']['servers'] = nil  # List servers to override chef search on role
+default['graphite']['ha_relay']['max_queue_size'] = "1000"
 
 default['graphite']['storage_aggregation'] = nil
 default['graphite']['storage_schemas'] = [
@@ -46,7 +67,7 @@ default['graphite']['storage_schemas'] = [
 ]
 
 case node['platform_family']
-when "debian"
+when "debian","freebsd"
   default['graphite']['carbon']['service_type'] = "runit"
 when "rhel","fedora"
   default['graphite']['carbon']['service_type'] = "init"
@@ -69,6 +90,21 @@ default['graphite']['web_server'] = 'apache'
 default['graphite']['user_account'] = node['apache']['user']
 default['graphite']['group_account'] = node['apache']['group']
 default['graphite']['create_user'] = false
+default['graphite']['database']['adapter'] = 'sqlite'
+default['graphite']['database']['host'] = ''
+default['graphite']['database']['port'] = ''
+default['graphite']['database']['name'] = 'graphite'
+default['graphite']['database']['user'] = ''
+default['graphite']['database']['pass'] = ''
+
+default['graphite']['ldap']['enable'] = false
+default['graphite']['ldap']['server'] = 'server name'
+default['graphite']['ldap']['port'] = '389'
+default['graphite']['ldap']['uri'] = 'ldap://server.example.com:389'
+default['graphite']['ldap']['search_base'] = 'OU=Employees,DC=hq,DC=rws'
+default['graphite']['ldap']['base_user'] = 'CN=read only user,OU=Employees,DC=example,DC=com'
+default['graphite']['ldap']['base_pass'] = 'secret'
+default['graphite']['ldap']['user_query'] = '(sAMAccountName=%s)'
 
 case node['platform_family']
 when "debian"

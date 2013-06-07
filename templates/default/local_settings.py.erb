@@ -60,8 +60,8 @@ GRAPHTEMPLATES_CONF = '<%= @base_dir %>/conf/graphTemplates.conf'
 
 ## Data directories
 # NOTE: If any directory is unreadable in DATA_DIRS it will break metric browsing
-WHISPER_DIR = '<%= @storage_dir %>/whisper'
-RRD_DIR = '<%= @storage_dir %>/rrd'
+WHISPER_DIR = '<%= @storage_dir %>/whisper/'
+RRD_DIR = '<%= @storage_dir %>/rrd/'
 DATA_DIRS = [WHISPER_DIR, RRD_DIR] # Default: set from the above variables
 LOG_DIR = '<%= @storage_dir %>/log/webapp'
 INDEX_FILE = '<%= @storage_dir %>/index'  # Search index file
@@ -86,14 +86,16 @@ INDEX_FILE = '<%= @storage_dir %>/index'  # Search index file
 # Authentication Configuration #
 #####################################
 ## LDAP / ActiveDirectory authentication setup
-#USE_LDAP_AUTH = True
-#LDAP_SERVER = "ldap.mycompany.com"
-#LDAP_PORT = 389
-#LDAP_URI = "ldaps://ldap.mycompany.com:636"
-#LDAP_SEARCH_BASE = "OU=users,DC=mycompany,DC=com"
-#LDAP_BASE_USER = "CN=some_readonly_account,DC=mycompany,DC=com"
-#LDAP_BASE_PASS = "readonly_account_password"
-#LDAP_USER_QUERY = "(username=%s)"  #For Active Directory use "(sAMAccountName=%s)"
+<% if @ldap['enable'] -%>
+USE_LDAP_AUTH = True
+LDAP_SERVER = "<%= @ldap['server'] %>"
+LDAP_PORT = <%= @ldap['port'] %>
+LDAP_URI = "<%= @ldap['user'] %>"
+LDAP_SEARCH_BASE = "<%= @ldap['search_base'] %>"
+LDAP_BASE_USER = "<%= @ldap['base_user'] %>"
+LDAP_BASE_PASS = "<%= @ldap['base_pass'] %>"
+LDAP_USER_QUERY = "<%= @ldap['user_query'] %>"
+<% end -%>
 #
 # If you want to further customize the ldap connection options you should
 # directly use ldap.set_option to set the ldap module's global options.
@@ -136,16 +138,30 @@ INDEX_FILE = '<%= @storage_dir %>/index'  # Search index file
 #
 # Users with Django 1.2 or greater should use the new dictionary
 # specification as the old database specification style is removed in 1.4
+<% case @db_options['adapter'] -%>
+<% when "sqlite" -%>
 DATABASES = {
     'default': {
-        'NAME': '<%= @storage_dir %>/graphite.db',
         'ENGINE': 'django.db.backends.sqlite3',
-        'USER': '',
-        'PASSWORD': '',
-        'HOST': '',
-        'PORT': ''
+        'NAME': '<%= @storage_dir %>/graphite.db',
+        'USER': '<%= @db_options['user'] %>',
+        'PASSWORD': '<%= @db_options['pass'] %>',
+        'HOST': '<%= @db_options['host'] %>',
+        'PORT': '<%= @db_options['port'] %>'
     }
 }
+<% when "postgresql" -%>
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': '<%= @db_options['name'] %>',
+        'USER': '<%= @db_options['user'] %>',
+        'PASSWORD': '<%= @db_options['pass'] %>',
+        'HOST': '<%= @db_options['host'] %>',
+        'PORT': '<%= @db_options['port'] %>'
+    }
+}
+<% end -%>
 
 # Users still on Django 1.1 must use the old method instead:
 #DATABASE_ENGINE = 'django.db.backends.mysql'
@@ -188,8 +204,21 @@ DATABASES = {
 # and a common scheme is to use 7102 for instance b, 7202 for instance c, etc.
 #
 # You *should* use 127.0.0.1 here in most cases
+<% if node['graphite']['carbon']['cache_instances'] > 1 -%>
+<%
+  hosts = []
+  index = 'a'
+  node['graphite']['carbon']['cache_instances'].times do |i|
+    hosts << "127.0.0.1:#{node['graphite']['carbon']['cache_query_port']+(10*(i+1))}:#{index}"
+    index = index.next
+  end
+-%>
+CARBONLINK_HOSTS = <%= hosts %>
+CARBONLINK_TIMEOUT = 1.0
+<% else -%>
 #CARBONLINK_HOSTS = ["127.0.0.1:7002:a", "127.0.0.1:7102:b", "127.0.0.1:7202:c"]
 #CARBONLINK_TIMEOUT = 1.0
+<% end -%>
 
 #####################################
 # Additional Django Settings #

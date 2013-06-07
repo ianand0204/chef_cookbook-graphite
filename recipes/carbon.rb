@@ -17,8 +17,14 @@
 # limitations under the License.
 #
 
-package "python-twisted"
-package "python-simplejson"
+case node['platform']
+when "freebsd"
+  package "py-twisted"
+  package "py-simplejson"
+else
+  package "python-twisted"
+  package "python-simplejson"
+end
 
 if node['graphite']['carbon']['enable_amqp']
   include_recipe "python::pip"
@@ -50,8 +56,39 @@ end
 case node['graphite']['carbon']['service_type']
 when "runit"
   carbon_cache_service_resource = "runit_service[carbon-cache]"
+  carbon_relay_service_resource = "runit_service[carbon-relay]"
+  carbon_ha_relay_service_resource = "runit_service[carbon-relay-ha]"
 else
   carbon_cache_service_resource = "service[carbon-cache]"
+  carbon_relay_service_resource = "service[carbon-relay]"
+  carbon_ha_relay_service_resource = "service[carbon-relay-ha]"
+end
+
+if node['graphite']['ha_relay']['enable']
+  if node['graphite']['ha_relay']['instances'] > 1
+    node['graphite']['ha_relay']['instances'].times do |i|
+      execute "add ifconfig lo0 127.0.1.#{1+i}" do
+        command "ifconfig lo0 alias 127.0.1.#{1+i} netmask 255.255.255.255"
+        action :run
+      end
+    end
+  end
+  if node['graphite']['ha_relay']['servers'].nil? and !Chef::Config[:solo]
+    ha_relay_servers = search("node","roles:#{node['graphite']['ha_relay']['role_name']} AND chef_environment:#{node.chef_environment}").map{|n| "#{n.ipaddress}:#{node['graphite']['carbon']['relay']['pickle_receiver_port']}" }
+  else
+    ha_relay_servers = node['graphite']['ha_relay']['servers']
+  end
+else
+  ha_relay_servers = []
+end
+
+if node['graphite']['carbon']['relay']['instances'] > 1
+  node['graphite']['carbon']['relay']['instances'].times do |i|
+    execute "add ifconfig lo0 127.0.2.#{1+i}" do
+      command "ifconfig lo0 alias 127.0.2.#{1+i} netmask 255.255.255.255"
+      action :run
+    end
+  end
 end
 
 template "#{node['graphite']['base_dir']}/conf/carbon.conf" do
@@ -63,6 +100,7 @@ template "#{node['graphite']['base_dir']}/conf/carbon.conf" do
              :pickle_receiver_port => node['graphite']['carbon']['pickle_receiver_port'],
              :cache_query_interface => node['graphite']['carbon']['cache_query_interface'],
              :cache_query_port => node['graphite']['carbon']['cache_query_port'],
+             :cache_instances => node['graphite']['carbon']['cache_instances'],
              :max_cache_size => node['graphite']['carbon']['max_cache_size'],
              :max_updates_per_second => node['graphite']['carbon']['max_updates_per_second'],
              :max_creates_per_second => node['graphite']['carbon']['max_creates_per_second'],
@@ -75,8 +113,61 @@ template "#{node['graphite']['base_dir']}/conf/carbon.conf" do
              :amqp_password => node['graphite']['carbon']['amqp_password'],
              :amqp_exchange => node['graphite']['carbon']['amqp_exchange'],
              :amqp_metric_name_in_body => node['graphite']['carbon']['amqp_metric_name_in_body'],
+             :relay_max_datapoints_per_message => node['graphite']['carbon']['relay']['max_datapoints_per_message'],
+             :relay_use_flow_control => node['graphite']['carbon']['relay']['use_flow_control'],
+             :relay_relay_method => node['graphite']['carbon']['relay']['relay_method'],
+             :relay_max_queue_size => node['graphite']['carbon']['relay']['max_queue_size'],
+             :relay_instances => node['graphite']['carbon']['relay']['instances'],
+             :relay_line_receiver_interface => node['graphite']['carbon']['relay']['line_receiver_interface'],
+             :relay_line_receiver_port => node['graphite']['carbon']['relay']['line_receiver_port'],
+             :relay_pickle_receiver_interface => node['graphite']['carbon']['relay']['pickle_receiver_interface'],
+             :relay_pickle_receiver_port => node['graphite']['carbon']['relay']['pickle_receiver_port'],
+             :ha_relay_enable => node['graphite']['ha_relay']['enable'],
+             :ha_relay_instances => node['graphite']['ha_relay']['instances'],
+             :ha_relay_line_receiver_port => node['graphite']['ha_relay']['line_receiver_port'],
+             :ha_relay_pickle_receiver_port => node['graphite']['ha_relay']['pickle_receiver_port'],
+             :ha_relay_max_queue_size => node['graphite']['ha_relay']['max_queue_size'],
+             :ha_relay_servers => ha_relay_servers.sort,
              :storage_dir => node['graphite']['storage_dir'])
-  notifies :restart, carbon_cache_service_resource
+  if node['graphite']['carbon']['cache_instances'] > 1
+    index = 'a'
+    node['graphite']['carbon']['cache_instances'].times do
+      notifies :restart, carbon_cache_service_resource.gsub(/carbon-cache/, "carbon-cache-#{index}")
+      index = index.next
+    end
+    if node['graphite']['carbon']['relay']['instances'] > 1
+      index = 'a'
+      node['graphite']['carbon']['relay']['instances'].times do |i|
+        notifies :restart, carbon_relay_service_resource.gsub(/carbon-relay/, "carbon-relay-#{index}")
+        index = index.next
+      end
+    else
+      notifies :restart, carbon_relay_service_resource
+    end
+  else
+    notifies :restart, carbon_cache_service_resource
+  end
+  if node['graphite']['ha_relay']['enable']
+    if node['graphite']['ha_relay']['instances'] > 1
+      index = 'a'
+      node['graphite']['ha_relay']['instances'].times do |i|
+        notifies :restart, carbon_ha_relay_service_resource.gsub(/carbon-relay-ha/, "carbon-relay-ha-#{index}")
+        index = index.next
+      end
+    else
+      notifies :restart, carbon_ha_relay_service_resource
+    end
+  end
+end
+
+if node['graphite']['ha_relay']['enable']
+  template "#{node['graphite']['base_dir']}/conf/relay-rules.conf" do
+    source 'relay-rules.conf.erb'
+    owner node['graphite']['user_account']
+    group node['graphite']['group_account']
+    variables({:servers => ha_relay_servers})
+    only_if { ha_relay_servers.is_a?(Array) }
+  end
 end
 
 %w{ schemas aggregation }.each do |storage_feature|

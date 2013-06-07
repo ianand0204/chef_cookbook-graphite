@@ -20,7 +20,9 @@
 include_recipe "python"
 include_recipe "memcached"
 
-include_recipe "graphite::user"
-include_recipe "graphite::whisper"
-include_recipe "graphite::carbon"
-include_recipe "graphite::web"
+if node['languages'].include?('python')
+  include_recipe "graphite::user"
+  include_recipe "graphite::whisper"
+  include_recipe "graphite::carbon"
+  include_recipe "graphite::web"
+end

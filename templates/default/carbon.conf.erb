@@ -28,13 +28,18 @@ MAX_UPDATES_PER_SECOND = <%= @max_updates_per_second %>
 MAX_CREATES_PER_MINUTE = <%= @max_creates_per_second %>
 
 LINE_RECEIVER_INTERFACE = <%= @line_receiver_interface %>
-LINE_RECEIVER_PORT = <%= @line_receiver_port %>
-
 PICKLE_RECEIVER_INTERFACE = <%= @pickle_receiver_interface %>
-PICKLE_RECEIVER_PORT = <%= @pickle_receiver_port %>
-
 CACHE_QUERY_INTERFACE = <%= @cache_query_interface %>
+
+<% if @cache_instances > 1 %>
+LINE_RECEIVER_PORT = <%= @line_receiver_port+10 %>
+PICKLE_RECEIVER_PORT = <%= @pickle_receiver_port+10 %>
+CACHE_QUERY_PORT = <%= @cache_query_port+10 %>
+<% else %>
+LINE_RECEIVER_PORT = <%= @line_receiver_port %>
+PICKLE_RECEIVER_PORT = <%= @pickle_receiver_port %>
 CACHE_QUERY_PORT = <%= @cache_query_port %>
+<% end %>
 
 # By default, carbon-cache will log every whisper update. This can be excessive and
 # degrade performance if logging on the same volume as the whisper data is stored.
@@ -69,6 +74,21 @@ AMQP_METRIC_NAME_IN_BODY = <%= @amqp_metric_name_in_body ? "True" : "False" %>
 # AMQP_EXCHANGE = graphite
 <% end %>
 
+<%
+if @cache_instances > 1
+  index = 'a'
+  (@cache_instances-1).times do |i|
+    index = index.next
+-%>
+[cache:<%= index %>]
+LINE_RECEIVER_PORT = <%= @line_receiver_port+(10*(i+2)) %>
+PICKLE_RECEIVER_PORT = <%= @pickle_receiver_port+(10*(i+2)) %>
+CACHE_QUERY_PORT = <%= @cache_query_port+(10*(i+2)) %>
+<%
+  end
+end
+-%>
+
 # Patterns for all of the metrics this machine will store. Read more at
 # http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#Bindings
 #
@@ -82,12 +102,71 @@ AMQP_METRIC_NAME_IN_BODY = <%= @amqp_metric_name_in_body ? "True" : "False" %>
 # with the default configuration, you have to specify a distinict
 # interfaces and ports for the listeners.
 
-#[relay]
-#LINE_RECEIVER_INTERFACE = 0.0.0.0
-#LINE_RECEIVER_PORT = 2003
+<% if @cache_instances > 1 %>
+[relay]
+LINE_RECEIVER_INTERFACE = <%= @relay_line_receiver_interface %>
+LINE_RECEIVER_PORT = <%= @relay_line_receiver_port %>
+PICKLE_RECEIVER_INTERFACE = <%= @relay_pickle_receiver_interface %>
+PICKLE_RECEIVER_PORT = <%= @relay_pickle_receiver_port %>
 
-#PICKLE_RECEIVER_INTERFACE = 0.0.0.0
-#PICKLE_RECEIVER_PORT = 2004
+MAX_DATAPOINTS_PER_MESSAGE = <%= @relay_max_datapoints_per_message %>
+USE_FLOW_CONTROL = <%= @relay_use_flow_control ? 'True' : 'False' %>
+RELAY_METHOD = <%= @relay_relay_method %>
+<%
+hosts = []
+index = 'a'
+@cache_instances.times do |i|
+  hosts << "127.0.0.1:#{@pickle_receiver_port+(10*(i+1))}:#{index}"
+  index=index.next
+end
+hosts = hosts.join(', ')
+-%>
+DESTINATIONS = <%= hosts %>
+CH_HOST_LIST = <%= hosts %>
+MAX_QUEUE_SIZE = <%= @relay_max_queue_size %>
+<% end %>
+<%
+if @relay_instances > 1
+  index = 'a'
+  (@relay_instances).times do |i|
+-%>
+[relay:<%= index %>]
+LINE_RECEIVER_INTERFACE = <%= "127.0.2.#{1+i}" %>
+LINE_RECEIVER_PORT = <%= @relay_line_receiver_port+10 %>
+PICKLE_RECEIVER_INTERFACE = <%= "127.0.2.#{1+i}" %>
+PICKLE_RECEIVER_PORT = <%= @relay_pickle_receiver_port+10 %>
+<%
+    index = index.next
+  end
+end
+-%>
 
-#CACHE_SERVERS = server1, server2, server3
-#MAX_QUEUE_SIZE = 10000
+<% if @ha_relay_enable %>
+<%
+if @ha_relay_instances > 1
+  index = 'a'
+  (@ha_relay_instances).times do |j|
+-%>
+[relay:ha-<%= index %>]
+RELAY_METHOD = rules
+LINE_RECEIVER_INTERFACE = <%= "127.0.1.#{1+j}" %>
+LINE_RECEIVER_PORT = <%= @ha_relay_line_receiver_port+10 %>
+PICKLE_RECEIVER_INTERFACE = <%= "127.0.1.#{1+j}" %>
+PICKLE_RECEIVER_PORT = <%= @ha_relay_pickle_receiver_port+10 %>
+DESTINATIONS = <%= @ha_relay_servers.join(', ') %>
+MAX_QUEUE_SIZE = <%= @ha_relay_max_queue_size %>
+<%
+    index = index.next
+  end
+else
+%>
+[relay:ha]
+RELAY_METHOD = rules
+LINE_RECEIVER_PORT = <%= @ha_relay_line_receiver_port %>
+PICKLE_RECEIVER_PORT = <%= @ha_relay_pickle_receiver_port %>
+DESTINATIONS = <%= @ha_relay_servers.join(', ') %>
+MAX_QUEUE_SIZE = <%= @ha_relay_max_queue_size %>
+<%
+end
+-%>
+<% end %>
